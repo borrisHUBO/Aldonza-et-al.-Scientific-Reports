@@ -1,0 +1,105 @@
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Get cell lines for each drug pair
+Gef_Pac_cls = []
+Gef_GSK_cls = []
+Gef_Doc_cls = []
+Gef_Epo_cls = []
+Gef_Vinb_cls = []
+Gef_PF_cls = []
+Gef_Vino_cls = []
+Gef_EHT_cls = []
+Gef_IPA_cls = []
+Gef_Y_cls = []
+Gef_GSK4_cls = []
+
+pair_list_cls = [Gef_Pac_cls, Gef_GSK_cls, Gef_Doc_cls, Gef_Epo_cls, Gef_Vinb_cls, Gef_PF_cls, Gef_Vino_cls, Gef_EHT_cls, Gef_IPA_cls, Gef_Y_cls, Gef_GSK4_cls]
+
+pair_list_names = ["Gef_Pac", "Gef_GSK", "Gef_Doc", "Gef_Epo", "Gef_Vinb", "Gef_PF", "Gef_Vino", "Gef_EHT", "Gef_IPA", "Gef_Y", "Gef_GSK4"]
+
+for index, pair in enumerate(pair_list_names):
+	input_file = open("CLs/"+pair+".txt", "r")
+	for row in input_file.readlines():
+		pair_list_cls[index].append(row.strip())
+
+# Classify genes
+deletion_cl_gene = {}
+amplification_cl_gene = {}
+
+with open("datasets/amp_del_input.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		cell_line = row['\ufeffSample']
+		classification = row['Alteration Type']
+		genes = row['Region identifier'].split()
+		if len(genes) > 1:
+			genes = genes[1][1:-1]
+			genes = genes.split(',')
+			for gene in genes:
+				if classification == 'Deletion':
+					if cell_line not in deletion_cl_gene.keys():
+						deletion_cl_gene[cell_line] = 1
+					else:
+						deletion_cl_gene[cell_line] += 1
+				elif classification == 'Amplification':
+					if cell_line not in amplification_cl_gene.keys():
+						amplification_cl_gene[cell_line] = 1
+					else: 
+						amplification_cl_gene[cell_line] += 1
+
+# Perform computation
+cl_gene = [deletion_cl_gene, amplification_cl_gene]
+cl_gene_names = ["deletion", "amplification"]
+
+for index1, genes in enumerate(cl_gene):
+	print("---Printing " + cl_gene_names[index1])
+
+	to_plot = np.zeros(shape=(len(pair_list_cls), len(pair_list_cls)))
+
+	pair_Gef_Pac = {}
+	pair_Gef_GSK = {}
+	pair_Gef_Doc = {}
+	pair_Gef_Epo = {}
+	pair_Gef_Vinb = {}
+	pair_Gef_PF = {}
+	pair_Gef_Vino = {}
+	pair_Gef_EHT = {}
+	pair_Gef_IPA = {}
+	pair_Gef_Y = {}
+	pair_Gef_GSK4 = {}
+
+	pair_dicts = [pair_Gef_Pac, pair_Gef_GSK, pair_Gef_Doc, pair_Gef_Epo, pair_Gef_Vinb, pair_Gef_PF, pair_Gef_Vino, pair_Gef_EHT, pair_Gef_IPA, pair_Gef_Y, pair_Gef_GSK4]	
+
+	for index2, pair in enumerate(pair_list_cls):		
+		for key, value in genes.items():
+			if key in pair:
+				pair_dicts[index2][key] = genes[key]
+
+	
+	for index2, pair1 in enumerate(pair_dicts):
+		for index3, pair2 in enumerate(pair_dicts):
+			for key, value in pair1.items():
+				for key2, value2 in pair2.items():
+					if key == key2:
+						if index2 >= index3:
+							to_plot[index2][index3] += min(value, value2)
+
+	write_to_plot = open("plot_values/amp_del/"+cl_gene_names[index1]+"_plot_values.csv", "w+")
+
+	for row in to_plot:
+		for column in row:
+			write_to_plot.write(str(column) + ",")
+		write_to_plot.write("\n")
+
+	to_plot = to_plot - to_plot.min(axis=0)
+	safe_max = to_plot.max(axis=0) - to_plot.min(axis=0)
+	safe_max[safe_max==0] = 1
+	to_plot = to_plot / safe_max
+	mask = np.zeros_like(to_plot)
+	mask[np.triu_indices_from(mask, 1)] = True
+	ax = sns.heatmap(to_plot, cmap="Blues", mask=mask)
+	plt.savefig("images/amp_del/"+cl_gene_names[index1]+"_image.png", dpi=1200)
+	plt.close()
