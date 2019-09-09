@@ -1,0 +1,113 @@
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Get cell lines for each drug pair
+Gef_Pac_cls = []
+Gef_GSK_cls = []
+Gef_Doc_cls = []
+Gef_Epo_cls = []
+Gef_Vinb_cls = []
+Gef_PF_cls = []
+Gef_Vino_cls = []
+Gef_EHT_cls = []
+Gef_IPA_cls = []
+Gef_Y_cls = []
+Gef_GSK4_cls = []
+
+pair_list_cls = [Gef_Pac_cls, Gef_GSK_cls, Gef_Doc_cls, Gef_Epo_cls, Gef_Vinb_cls, Gef_PF_cls, Gef_Vino_cls, Gef_EHT_cls, Gef_IPA_cls, Gef_Y_cls, Gef_GSK4_cls]
+
+pair_list_names = ["Gef_Pac", "Gef_GSK", "Gef_Doc", "Gef_Epo", "Gef_Vinb", "Gef_PF", "Gef_Vino", "Gef_EHT", "Gef_IPA", "Gef_Y", "Gef_GSK4"]
+
+for index, pair in enumerate(pair_list_names):
+	input_file = open("CLs/"+pair+".txt", "r")
+	for row in input_file.readlines():
+		pair_list_cls[index].append(row.strip())
+
+# Get corresponding gene names of cosmic IDs
+cell_id = {}
+
+with open("datasets/cosmic_id.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		cell_id[row['COSMIC_ID']] = row['Name']
+
+# Perform computation
+wanted = ["PDGFRA", 'PDGFRB', 'KDR', 'KIT', 'FLT3', 'MET', 'ALK', 'CSF1R', 'RET', 'FLT1', 'FLT4', 'AXL', 'CAMK1', 'EPHB4', 'DDR1', 'NTRK1', 'JAK2', 'FGFR1', 'FGFR3', 'EGFR', 'ERBB2', 'ADCK4']
+
+gene_list = []
+dataset = [] 
+
+with open('datasets/expression_input.csv', newline='') as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		gene_list.append(row['\ufeffGENE_SYMBOLS'])
+		del row['\ufeffGENE_SYMBOLS']
+		dataset.append(row)
+
+	gene_ordering_file = open("plot_values/expression/gene_ordering.txt", "w+")
+	for index, gene in enumerate(gene_list):
+		gene_ordering_file.write(str(gene) + "\n")
+
+	gene_plot_pos = open("plot_values/expression/gene_plot_pos.txt", "w+")
+	gene_plot_pos_list = []
+	for index, gene in enumerate(gene_list):
+		if gene in wanted:
+			gene_plot_pos.write(str(index) + "," + str(gene) + "\n")
+			gene_plot_pos_list.append(index)
+
+	to_plot = np.zeros(shape=(len(dataset), 1))
+	for index in gene_plot_pos_list:
+		to_plot[index][0] = 1.
+
+	write_to_plot = open("plot_values/expression/label_plot_values.csv", "w+")
+	for row in to_plot:
+		for column in row:
+			write_to_plot.write(str(column) + ",")
+		write_to_plot.write("\n")
+
+	plt.figure(figsize=(4,20))
+	ax = sns.heatmap(to_plot, cmap="Blues")
+	plt.savefig("images/expression/label_image.png", dpi=1200)
+	plt.close()
+
+	for index1, pair in enumerate(pair_list_cls):
+		print(pair_list_names[index1])
+		to_plot = np.zeros(shape=(len(dataset), 1))
+		for index2, row in enumerate(dataset):
+			gene_percase_mean = 0.
+			gene_all_mean = 0.
+			gene_percase_count = 0.
+			gene_all_count = 0.
+
+			for data in row:
+				if data[5:] in cell_id:
+					cell = cell_id[data[5:]]
+					if cell in pair:
+						gene_percase_mean += float(row[data])
+						gene_percase_count += 1
+					gene_all_mean += float(row[data])
+					gene_all_count += 1
+
+			gene_percase_mean /= gene_percase_count
+			gene_all_mean /= gene_all_count
+			gene_mean = gene_percase_mean / gene_all_mean
+			to_plot[index2][0] = gene_mean
+
+		to_plot = to_plot - to_plot.min(axis=0)
+		safe_max = to_plot.max(axis=0) - to_plot.min(axis=0)
+		safe_max[safe_max==0] = 1.
+		to_plot = to_plot / safe_max
+
+		write_to_plot = open("plot_values/expression/"+pair_list_names[index1]+"_plot_values.csv", "w+")
+
+		for row in to_plot:
+			for column in row:
+				write_to_plot.write(str(column) + ",")
+			write_to_plot.write("\n")
+
+		plt.figure(figsize=(4,20))
+		ax = sns.heatmap(to_plot, cmap="Blues")
+		plt.savefig("images/expression/"+pair_list_names[index1]+"_image.png", dpi=1200)
+		plt.close()
