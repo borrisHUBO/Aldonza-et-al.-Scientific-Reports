@@ -1,0 +1,59 @@
+import csv
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+
+# Get cell lines for each drug pair
+Gef_Pac_cls = []
+
+input_file = open("CLs/Gef_Pac.txt", "r")
+for row in input_file.readlines():
+	Gef_Pac_cls.append(row.strip())
+
+# Get corresponding gene names of cosmic IDs
+cell_id = {}
+
+with open("datasets/cosmic_id.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		cell_id[row['COSMIC_ID']] = row['Name']
+
+# Perform computation
+wanted = ["PDGFRA", 'PDGFRB', 'KDR', 'KIT', 'FLT3', 'MET', 'ALK', 'CSF1R', 'RET', 'FLT1', 'FLT4', 'AXL', 'CAMK1', 'EPHB4', 'DDR1', 'NTRK1', 'JAK2', 'FGFR1', 'FGFR3', 'EGFR', 'ERBB2', 'ADCK4']
+
+gene_list = []
+dataset = [] 
+
+with open('datasets/expression_input.csv', newline='') as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		if row['\ufeffGENE_SYMBOLS'] in wanted:
+			gene_list.append(row['\ufeffGENE_SYMBOLS'])
+			del row['\ufeffGENE_SYMBOLS']
+			dataset.append(row)
+
+	gene_value = {}
+
+	for index, row in enumerate(dataset):
+		for data in row:
+			if data[5:] in cell_id:
+				cell = cell_id[data[5:]]
+				if cell in Gef_Pac_cls:
+					if gene_list[index] not in gene_value.keys():
+						gene_value[gene_list[index]] = float(row[data])
+					else:	
+						gene_value[gene_list[index]] += float(row[data])
+
+	
+	write_gene_value = open("plot_values/expression/wordcloud/wordcloud_plot_values.csv", "w+")
+
+	for key, value in gene_value.items():
+		gene_value[key] = value/len(gene_value)
+		write_gene_value.write(str(key)+","+str(value)+"\n")
+
+	wordcloud = WordCloud(background_color="white")
+	wordcloud.generate_from_frequencies(frequencies=gene_value)
+	plt.figure()
+	plt.imshow(wordcloud, interpolation="bilinear")
+	plt.axis("off")
+	plt.savefig("images/expression/wordcloud/wordcloud_image.png", dpi=1200)
+	plt.close()
