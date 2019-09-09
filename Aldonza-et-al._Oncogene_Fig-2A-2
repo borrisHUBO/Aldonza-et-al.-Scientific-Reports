@@ -1,0 +1,97 @@
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Get cell lines for each drug pair
+Gef_Pac_cls = []
+Gef_GSK_cls = []
+Gef_Doc_cls = []
+Gef_Epo_cls = []
+Gef_Vinb_cls = []
+Gef_PF_cls = []
+Gef_Vino_cls = []
+Gef_EHT_cls = []
+Gef_IPA_cls = []
+Gef_Y_cls = []
+Gef_GSK4_cls = []
+
+pair_list_cls = [Gef_Pac_cls, Gef_GSK_cls, Gef_Doc_cls, Gef_Epo_cls, Gef_Vinb_cls, Gef_PF_cls, Gef_Vino_cls, Gef_EHT_cls, Gef_IPA_cls, Gef_Y_cls, Gef_GSK4_cls]
+
+pair_list_names = ["Gef_Pac", "Gef_GSK", "Gef_Doc", "Gef_Epo", "Gef_Vinb", "Gef_PF", "Gef_Vino", "Gef_EHT", "Gef_IPA", "Gef_Y", "Gef_GSK4"]
+
+for index, pair in enumerate(pair_list_names):
+	input_file = open("CLs/"+pair+".txt", "r")
+	for row in input_file.readlines():
+		pair_list_cls[index].append(row.strip())
+
+# Get corresponding gene names of cosmic IDs
+cell_id = {}
+
+with open("datasets/cosmic_id.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		cell_id[row['COSMIC_ID']] = row['Name']
+
+# Perform computation
+file_list = ["ALL_SEQ_BEM", "BLCA_SEQ_BEM", "BRCA_SEQ_BEM", "CESC_SEQ_BEM", "CLL_SEQ_BEM", "COREAD_SEQ_BEM", "DLBC_SEQ_BEM", "ESCA_SEQ_BEM", "GBM_SEQ_BEM", "HNSC_SEQ_BEM", "KIRC_SEQ_BEM", "LAML_SEQ_BEM", "LCML_SEQ_BEM", "LGG_SEQ_BEM", "LIHC_SEQ_BEM", "LUAD_SEQ_BEM", "LUSC_SEQ_BEM", "MB_SEQ_BEM", "MESO_SEQ_BEM", "MM_SEQ_BEM", "NB_SEQ_BEM", "OV_SEQ_BEM", "PAAD_SEQ_BEM", "PANCAN_SEQ_BEM", "PRAD_SEQ_BEM", "SCLC_SEQ_BEM", "SKCM_SEQ_BEM", "STAD_SEQ_BEM", "THCA_SEQ_BEM", "UCEC_SEQ_BEM"]
+
+cl_count = {}
+
+for file in file_list:
+	with open("datasets/cg_preprocessed/"+file+".csv", newline="") as csvfile:
+		reader = csv.DictReader(csvfile)
+		for row in reader:
+			for column in row:
+				if column != 'CG':
+					if column in cell_id.keys():
+						if cell_id[column] in cl_count:
+							cl_count[cell_id[column]] += 1.
+						else:
+							cl_count[cell_id[column]] = 1.
+
+to_plot = np.zeros(shape=(len(pair_list_cls), len(pair_list_cls)))
+
+pair_Gef_Pac = {}
+pair_Gef_GSK = {}
+pair_Gef_Doc = {}
+pair_Gef_Epo = {}
+pair_Gef_Vinb = {}
+pair_Gef_PF = {}
+pair_Gef_Vino = {}
+pair_Gef_EHT = {}
+pair_Gef_IPA = {}
+pair_Gef_Y = {}
+pair_Gef_GSK4 = {}
+
+pair_dicts = [pair_Gef_Pac, pair_Gef_GSK, pair_Gef_Doc, pair_Gef_Epo, pair_Gef_Vinb, pair_Gef_PF, pair_Gef_Vino, pair_Gef_EHT, pair_Gef_IPA, pair_Gef_Y, pair_Gef_GSK4]	
+
+for index, pair in enumerate(pair_list_cls):		
+	for key, value in cl_count.items():
+		if key in pair:
+			pair_dicts[index][key] = cl_count[key]
+
+for index1, pair1 in enumerate(pair_dicts):
+	for index2, pair2 in enumerate(pair_dicts):
+		for key, value1 in pair1.items():
+			for key2, value2 in pair2.items():
+				if key == key2:
+					if index1 >= index2:
+						to_plot[index1][index2] += min(value1, value2)
+					
+write_to_plot = open("plot_values/cg/cg_to_plot.csv", "w+")
+
+for row in to_plot:
+	for column in row:
+		write_to_plot.write(str(column) + ",")
+	write_to_plot.write("\n")
+
+to_plot = to_plot - to_plot.min(axis=0)
+safe_max = to_plot.max(axis=0) - to_plot.min(axis=0)
+safe_max[safe_max==0] = 1
+to_plot = to_plot / safe_max
+mask = np.zeros_like(to_plot)
+mask[np.triu_indices_from(mask, 1)] = True
+ax = sns.heatmap(to_plot, cmap="Blues", mask=mask)
+plt.savefig("images/cg/cg_image.png", dpi=1200)
+plt.close()	 	
