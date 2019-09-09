@@ -1,0 +1,132 @@
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+import networkx as nx
+
+# Classify drugs
+EGFR = {}
+IGFR = {}
+RTK = {}
+cytoskeleton = {}
+
+with open("datasets/signaling_input.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		if row['Action'] == "targeted":
+			if row['Targeted process/pathway'] == "EGFR signaling":
+				EGFR[row['Name']] = 0.
+			elif row['Targeted process/pathway'] == "IGFR signaling":
+				IGFR[row['Name']] = 0.
+			elif row['Targeted process/pathway'] == "RTK signaling":
+				RTK[row['Name']] = 0.
+		if row['Targeted process/pathway'] == "cytoskeleton":
+			cytoskeleton[row['Name']] = 0.
+
+all_dicts = {**EGFR, **IGFR, **RTK, **cytoskeleton}
+pair_dict = {}
+
+for key1, value1 in all_dicts.items():
+	for key2, value2 in all_dicts.items():
+		if (key1 != key2) and ((key2, key1) not in pair_dict.keys()):
+			pair_dict[(key1,key2)] = 0.
+
+with open("datasets/resistant_sensitive.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		for drug in all_dicts.keys():
+			if row[drug] == "R":
+				all_dicts[drug] += 1.
+
+		for drug_pair in pair_dict.keys():
+			if (row[drug_pair[0]] == "R") and (row[drug_pair[1]] == "R"):
+				pair_dict[drug_pair] += 1.
+
+# Fix node positions
+all_pos = {}
+y_ref = 10
+x = 0
+y = 10
+
+for category in [EGFR, IGFR, RTK]:
+	for key in category.keys():
+		all_pos[key] = (x,y)
+		y += 30
+		if y > 150:
+			if y_ref == 10:
+				y_ref = 0
+			else:
+				y_ref = 10
+			y = y_ref
+			x += 30
+
+y_ref = 60
+x = 230
+y = 60
+
+for key in cytoskeleton.keys():
+	all_pos[key] = (x,y)
+
+	y += 30
+
+	if y > 120:
+		if y_ref == 60:
+			y_ref = 50
+		else:
+			y_ref = 60
+		y = y_ref
+
+		x += 30
+
+# Perform computation
+for key, value in pair_dict.items():
+	pair_dict[key] = (value - min(pair_dict.values())) / (max(pair_dict.values()) - min(pair_dict.values()))
+	
+for key, value in pair_dict.items():
+	if pair_dict[key] <= 0.5:
+		pair_dict[key] = 0.3
+	elif pair_dict[key] > 0.5 and pair_dict[key] <= 0.8:
+		pair_dict[key] = 0.8
+	elif pair_dict[key] > 0.8:
+		pair_dict[key] = 1.5
+
+for_edge_color = {}
+for key, value in pair_dict.items():
+	if pair_dict[key] == 0.3:
+		for_edge_color[key] = "lightgrey"
+	elif pair_dict[key] == 0.8:
+		for_edge_color[key] = "darkgray"
+	elif pair_dict[key] == 1.5:
+		for_edge_color[key] = "dimgray"
+
+for_node_color = {}
+for key in all_dicts.keys():
+	if key in cytoskeleton.keys():
+		for_node_color[key] = "orange"
+	else:
+		for_node_color[key] = "turquoise"
+
+G = nx.Graph()
+
+G.add_nodes_from(list(all_dicts.keys()))
+
+for key in pair_dict.keys():
+	G.add_edge(key[0], key[1])
+
+node_size = []
+node_color = []
+edge_width = []
+edge_color = []
+
+for node in G.nodes():
+	node_size.append(all_dicts[node])
+	node_color.append(for_node_color[node])
+
+for edge in G.edges():
+	edge_width.append(pair_dict[edge])
+	edge_color.append(for_edge_color[edge])
+
+nx.draw(G, node_size=node_size, node_color=node_color, with_labels=True, width=edge_width, pos=all_pos, edgecolors='black', font_size=8, edge_color=edge_color)
+plt.savefig("images/signaling/signaling_image.png", dpi=1200)
+plt.close()
