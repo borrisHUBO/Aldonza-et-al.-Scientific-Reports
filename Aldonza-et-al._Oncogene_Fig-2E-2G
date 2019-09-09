@@ -1,0 +1,158 @@
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
+# Get cell lines for each drug pair
+Gef_Pac_cls = []
+Gef_GSK_cls = []
+Gef_Doc_cls = []
+Gef_Epo_cls = []
+Gef_Vinb_cls = []
+Gef_PF_cls = []
+Gef_Vino_cls = []
+Gef_EHT_cls = []
+Gef_IPA_cls = []
+Gef_Y_cls = []
+Gef_GSK4_cls = []
+
+pair_list_cls = [Gef_Pac_cls, Gef_GSK_cls, Gef_Doc_cls, Gef_Epo_cls, Gef_Vinb_cls, Gef_PF_cls, Gef_Vino_cls, Gef_EHT_cls, Gef_IPA_cls, Gef_Y_cls, Gef_GSK4_cls]
+
+pair_list_names = ["Gef_Pac", "Gef_GSK", "Gef_Doc", "Gef_Epo", "Gef_Vinb", "Gef_PF", "Gef_Vino", "Gef_EHT", "Gef_IPA", "Gef_Y", "Gef_GSK4"]
+
+for index, pair in enumerate(pair_list_names):
+	input_file = open("CLs/"+pair+".txt", "r")
+	for row in input_file.readlines():
+		pair_list_cls[index].append(row.strip())
+
+# Get corresponding gene names of cosmic IDs
+cell_id = {}
+
+with open("datasets/cosmic_id.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		cell_id[row['COSMIC_ID']] = row['Name']
+
+# Perform computation
+gene_list = []
+dataset = [] 
+
+with open('datasets/expression_input.csv', newline='') as csvfile:
+	reader = csv.DictReader(csvfile)
+
+	EGFR_index = 0
+
+	for index, row in enumerate(reader):
+		gene_list.append(row['\ufeffGENE_SYMBOLS'])
+		if row['\ufeffGENE_SYMBOLS'] == 'EGFR':
+			EGFR_index = index
+		del row['\ufeffGENE_SYMBOLS']
+		dataset.append(row)
+
+	high_EGFR_cls = []
+	low_EGFR_cls = []
+	EGFR_dataset = dataset[EGFR_index]
+
+	for data in EGFR_dataset:
+		if data[5:] in cell_id:
+			cell = cell_id[data[5:]]
+			if float(EGFR_dataset[data]) > 4.:
+				high_EGFR_cls.append(cell)
+			else:
+				low_EGFR_cls.append(cell)
+
+	gene_plot_pos_list = []
+	gene_plot_pos_names = []
+
+	gene_plot_pos = open("plot_values/expression/gene_plot_pos.txt", "r")
+	for row in gene_plot_pos.readlines():
+		row = row.strip().split(',')
+		gene_plot_pos_list.append(int(row[0]))
+		gene_plot_pos_names.append(row[1])
+
+	to_plot_all_high = np.zeros(shape=(len(gene_plot_pos_names)))
+	to_plot_all_low = np.zeros(shape=(len(gene_plot_pos_names)))
+	for index1, pair in enumerate(pair_list_cls):
+		print(pair_list_names[index1])
+
+		to_plot_high = np.zeros(shape=(len(gene_plot_pos_names), 1))
+		to_plot_low = np.zeros(shape=(len(gene_plot_pos_names), 1))
+
+		for index2, row in enumerate(dataset):
+			if index2 in gene_plot_pos_list:
+				gene_percase_mean_high = 0.
+				gene_percase_mean_low = 0.
+				gene_all_mean = 0.
+				gene_percase_count_high = 0.
+				gene_percase_count_low = 0.
+				gene_all_count = 0.
+
+				get_index = gene_plot_pos_list.index(index2)
+				for data in row:
+					if data[5:] in cell_id:
+						cell = cell_id[data[5:]]
+						if cell in pair:
+							if cell in high_EGFR_cls:
+								gene_percase_mean_high += float(row[data])
+								gene_percase_count_high += 1.
+							elif cell in low_EGFR_cls:
+								gene_percase_mean_low += float(row[data])
+								gene_percase_count_low += 1.
+						gene_all_mean += float(row[data])
+						gene_all_count += 1.
+
+				gene_percase_mean_high /= gene_percase_count_high
+				gene_percase_mean_low /= gene_percase_count_low
+				gene_all_mean /= gene_all_count
+				gene_mean_high = gene_percase_mean_high / gene_all_mean
+				gene_mean_low = gene_percase_mean_low / gene_all_mean
+				to_plot_high[get_index][0] = gene_mean_high
+				to_plot_low[get_index][0] = gene_mean_low
+
+
+		write_to_plot_high = open("plot_values/expression/rtk/high/"+pair_list_names[index1]+"_plot_values.csv","w+")
+		for index2, row in enumerate(to_plot_high):
+			for column in row:
+				write_to_plot_high.write(str(column))
+				to_plot_all_high[index2] += column
+			write_to_plot_high.write("\n")			 
+		ax = sns.heatmap(to_plot_high, cmap="Blues")
+		plt.savefig("images/expression/rtk/high/"+pair_list_names[index1]+"_image.png", dpi=1200)
+		plt.close()
+
+		write_to_plot_low = open("plot_values/expression/rtk/low/"+pair_list_names[index1]+"_plot_values.csv","w+")
+		for index2, row in enumerate(to_plot_low):
+			for column in row:
+				write_to_plot_low.write(str(column))
+				to_plot_all_low[index2] += column
+			write_to_plot_low.write("\n")
+		ax = sns.heatmap(to_plot_low, cmap="Blues")
+		plt.savefig("images/expression/rtk/low/"+pair_list_names[index1]+"_image.png", dpi=1200)
+		plt.close()
+
+	for index1, item in enumerate(to_plot_all_high):
+		to_plot_all_high[index1] = item/len(pair_list_names)
+
+	for index1, item in enumerate(to_plot_all_low):
+		to_plot_all_low[index1] = item/len(pair_list_names)
+
+	df = pd.DataFrame({'names': gene_plot_pos_names, 'mean': to_plot_all_high})
+	df.sort_values('mean', inplace=True)
+	df.plot(kind='barh', x='names', y='mean', color='royalblue')
+	plt.savefig("images/expression/rtk/high/all.png", dpi=1200)
+	plt.close()
+
+	write_to_plot_all_high = open("plot_values/expression/rtk/high/all.csv","w+")
+	for index1, row in df.iterrows():
+		write_to_plot_all_high.write(str(row['names']) + ',' + str(row['mean']) + '\n')
+
+	df = pd.DataFrame({'names': gene_plot_pos_names, 'mean': to_plot_all_low})
+	df.sort_values('mean', inplace=True)
+	df.plot(kind='barh', x='names', y='mean', color='royalblue')
+	plt.savefig("images/expression/rtk/low/all.png", dpi=1200)
+	plt.close()
+
+	write_to_plot_all_low = open("plot_values/expression/rtk/low/all.csv","w+")
+	for index1, row in df.iterrows():
+		write_to_plot_all_low.write(str(row['names']) + ',' + str(row['mean']) + '\n')
