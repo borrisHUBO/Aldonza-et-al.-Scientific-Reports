@@ -1,0 +1,106 @@
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Get cell lines for each drug pair
+Gef_Pac_cls = []
+Gef_GSK_cls = []
+Gef_Doc_cls = []
+Gef_Epo_cls = []
+Gef_Vinb_cls = []
+Gef_PF_cls = []
+Gef_Vino_cls = []
+Gef_EHT_cls = []
+Gef_IPA_cls = []
+Gef_Y_cls = []
+Gef_GSK4_cls = []
+
+pair_list_cls = [Gef_Pac_cls, Gef_GSK_cls, Gef_Doc_cls, Gef_Epo_cls, Gef_Vinb_cls, Gef_PF_cls, Gef_Vino_cls, Gef_EHT_cls, Gef_IPA_cls, Gef_Y_cls, Gef_GSK4_cls]
+
+pair_list_names = ["Gef_Pac", "Gef_GSK", "Gef_Doc", "Gef_Epo", "Gef_Vinb", "Gef_PF", "Gef_Vino", "Gef_EHT", "Gef_IPA", "Gef_Y", "Gef_GSK4"]
+
+for index, pair in enumerate(pair_list_names):
+	input_file = open("CLs/"+pair+".txt", "r")
+	for row in input_file.readlines():
+		pair_list_cls[index].append(row.strip())
+
+# Classify cl-gene pair		
+nonsense_cl_gene = {}
+frameshift_cl_gene = {}
+ess_splice_cl_gene = {}
+missense_cl_gene = {}
+
+with open("datasets/mutation_input.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		cell_line = row['\ufeffSAMPLE']
+		gene = row['Gene']
+		classification = row['Classification']
+
+		if classification == 'nonsense':
+			if (cell_line, gene) in nonsense_cl_gene.keys():
+				nonsense_cl_gene[(cell_line, gene)] += 1
+			else:
+				nonsense_cl_gene[(cell_line, gene)] = 1
+		elif classification == 'frameshift':
+			if (cell_line, gene) in frameshift_cl_gene.keys():
+				frameshift_cl_gene[(cell_line, gene)] += 1
+			else:
+				frameshift_cl_gene[(cell_line, gene)] = 1
+		elif classification == 'ess_splice':
+			if (cell_line, gene) in ess_splice_cl_gene.keys():
+				ess_splice_cl_gene[(cell_line, gene)] += 1
+			else:
+				ess_splice_cl_gene[(cell_line, gene)] = 1
+		elif classification == 'missense':	
+			if (cell_line, gene) in missense_cl_gene.keys():
+				missense_cl_gene[(cell_line, gene)] += 1
+			else:
+				missense_cl_gene[(cell_line, gene)] = 1
+
+# Perform computation
+wanted = ['PDGFRA', 'PDGFRB', 'KDR', 'KIT', 'FLT3', 'MET', 'ALK', 'CSF1R', 'RET', 'FLT1', 'FLT4', 'AXL', 'EPHB3', 'CAMK1', 'EPHB4', 'DDR1', 'NTRK1', 'JAK2', 'FGFR3', 'EGFR', 'ERBB2', 'ADCK4']
+
+rtk_ordering_file = open("plot_values/mutation/rtk/rtk_ordering.txt", "w+")
+
+for gene in wanted:
+	rtk_ordering_file.write(gene+"\n")
+
+cl_gene_mutation = [nonsense_cl_gene, frameshift_cl_gene, ess_splice_cl_gene, missense_cl_gene]
+cl_gene_names = ["nonsense", "frameshift", "ess_splice", "missense"]
+
+for index1, mutation in enumerate(cl_gene_mutation):
+	print("---Printing " + cl_gene_names[index1])
+	for index2, pair in enumerate(pair_list_cls):
+		print(pair_list_names[index2])
+		pair_nonsense = {}
+		for key, value in mutation.items():
+			if (key[0] in pair) and (key[1] in wanted):
+				pair_nonsense[key] = mutation[key]
+
+		to_plot = np.zeros(shape=(len(wanted), len(wanted)))
+
+		for key1, value1 in pair_nonsense.items():
+			for key2, value2 in pair_nonsense.items():
+				row = wanted.index(key1[1])
+				column = wanted.index(key2[1])
+				if row >= column:
+					to_plot[row][column] += min(value1, value2)
+
+		write_to_plot = open("plot_values/mutation/rtk/"+cl_gene_names[index1]+"/"+pair_list_names[index2]+"_plot_values.csv", "w+")
+		
+		for row in to_plot:
+			for column in row:
+				write_to_plot.write(str(column) + ",")
+			write_to_plot.write("\n")
+
+		to_plot = to_plot - to_plot.min(axis=0)
+		safe_max = to_plot.max(axis=0) - to_plot.min(axis=0)
+		safe_max[safe_max==0] = 1
+		to_plot = to_plot / safe_max
+		mask = np.zeros_like(to_plot)
+		mask[np.triu_indices_from(mask, 1)] = True
+		ax = sns.heatmap(to_plot, cmap="Blues", mask=mask)
+		plt.savefig("images/mutation/rtk/"+cl_gene_names[index1]+"/"+pair_list_names[index2]+"_image.png", dpi=1200)
+		plt.close()
