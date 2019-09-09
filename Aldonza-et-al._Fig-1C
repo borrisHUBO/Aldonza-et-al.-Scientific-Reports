@@ -1,0 +1,159 @@
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+import seaborn as sns
+import networkx as nx
+
+# Get cell lines for each drug pair
+Gef_Pac_cls = []
+Gef_Epo_cls = []
+
+pair_list_cls = [Gef_Pac_cls, Gef_Epo_cls]
+
+pair_list_names = ["Gef_Pac", "Gef_Epo"]
+
+for index, pair in enumerate(pair_list_names):
+	input_file = open("CLs/"+pair+".txt", "r")
+	for row in input_file.readlines():
+		pair_list_cls[index].append(row.strip())
+
+# Get corresponding gene names of cosmic IDs
+cell_id = {}
+
+with open("datasets/cosmic_id.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		cell_id[row['COSMIC_ID']] = row['Name']
+
+# Perform computation
+wanted = ["PDGFRA", 'PDGFRB', 'KDR', 'KIT', 'FLT3', 'MET', 'ALK', 'CSF1R', 'RET', 'FLT1', 'FLT4', 'AXL', 'CAMK1', 'EPHB4', 'DDR1', 'NTRK1', 'JAK2', 'FGFR1', 'FGFR3', 'EGFR', 'ERBB2', 'ADCK4']
+
+gene_list = []
+dataset = [] 
+
+create_nodes = {}
+for gene in wanted:
+	create_nodes[gene] = 'salmon'
+
+with open('datasets/expression_input.csv', newline='') as csvfile:
+	reader = csv.DictReader(csvfile)
+	row_names = []
+	for row in reader:
+		gene_list.append(row['\ufeffGENE_SYMBOLS'])
+		row_names.append(row['\ufeffGENE_SYMBOLS'])
+		del row['\ufeffGENE_SYMBOLS']
+		dataset.append(row)
+
+	to_plot_values = {}
+
+	for index1, pair in enumerate(pair_list_cls):
+		print(pair_list_names[index1])
+		gene_overall = 0.
+		for cl in pair:
+			for gene in wanted:
+				to_plot_values[(gene, pair_list_names[index1]+cl)] = 0.
+				
+		for index2, row in enumerate(dataset):
+			for data in row:
+				if data[5:] in cell_id:
+					cell = cell_id[data[5:]]
+					if cell in pair:
+						if row_names[index2] in wanted:
+							to_plot_values[(row_names[index2], pair_list_names[index1]+cell)] += float(row[data])
+							create_nodes[pair_list_names[index1]+cell] = 'gray'
+						gene_overall += float(row[data])	
+
+		for key, value in to_plot_values.items():
+			to_plot_values[key] = value/gene_overall
+
+for key, value in to_plot_values.items():
+	to_plot_values[key] = value * 10**6
+
+to_plot_values_not_zero = {}
+for key, value in to_plot_values.items():
+	if value != 0.0:
+		if value <= 0.01:
+			to_plot_values_not_zero[key] = 0.01
+		elif (value > 0.01) and (value <= 0.08):
+			to_plot_values_not_zero[key] = 0.05
+		else:
+			to_plot_values_not_zero[key] = 0.1
+
+for key in to_plot_values_not_zero.keys():
+	if key[1][:7] == 'Gef_Pac':
+		create_nodes[key[1]] = 'plum'
+	elif key[1][:7] == 'Gef_Epo':
+		create_nodes[key[1]] = 'lightskyblue'
+
+for_node_size = {}
+for key in create_nodes.keys():
+	if key in wanted:
+		for_node_size[key] = 10
+	else:
+		for_node_size[key] = 30
+
+for_pos = {}
+y = 10
+taken_positions_left = []
+taken_positions_right = []
+for key, value in create_nodes.items():
+	if key in wanted:
+		for_pos[key] = (150, y)
+		y+=50
+	if value == 'plum':
+		while True:
+			x1 = np.random.randint(low=0, high=130)
+			y1 = np.random.randint(low=0, high=1120)
+			if (x1, y1) not in taken_positions_left:
+				break
+		for_pos[key] = (x1, y1)
+	elif value == 'lightskyblue': 
+		while True:
+			x2 = np.random.randint(low=170, high=300)
+			y2 = np.random.randint(low=0, high=1120)
+			if (x2, y2) not in taken_positions_right:
+				break
+		for_pos[key] = (x2, y2)
+
+for_edge_color = {}
+for key, value in to_plot_values_not_zero.items():
+	if value == 0.01:
+		for_edge_color[key] = 'gray'
+	elif value == 0.05:
+		for_edge_color[key] = 'dimgrey'
+	else:
+		for_edge_color[key] = 'dimgray'
+
+G = nx.Graph()
+G.add_nodes_from(create_nodes.keys())
+
+for pair in to_plot_values_not_zero.keys():
+	G.add_edge(pair[0], pair[1])
+
+node_color = []
+node_size = []
+edge_colors = []
+edge_width = []
+
+labels = {}
+for node in G.nodes():
+	if node not in wanted:
+		labels[node] = node[7:]
+	node_color.append(create_nodes[node])
+	node_size.append(for_node_size[node])
+
+for edge in G.edges():
+	edge_colors.append(for_edge_color[edge])
+	edge_width.append(to_plot_values_not_zero[edge])
+
+nx.draw(G, node_color=node_color, labels=labels, width=edge_width, pos=for_pos, node_size=node_size, edge_color=edge_colors, font_size=3)
+plt.savefig("images/expression/fig1/no_rtk_labels.png", dpi=1200)
+plt.close()
+
+nx.draw(G, node_color=node_color, with_labels=True, width=edge_width, pos=for_pos, node_size=node_size, edge_color=edge_colors, font_size=3)
+plt.savefig("images/expression/fig1/all_labels.png", dpi=1200)
+plt.close()
+
+nx.draw(G, node_color=node_color, with_labels=False, width=edge_width, pos=for_pos, node_size=node_size, edge_color=edge_colors, font_size=3)
+plt.savefig("images/expression/fig1/no_labels.png", dpi=1200)
+plt.close()
