@@ -1,0 +1,72 @@
+import numpy as np
+import csv
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Get cell lines for each drug pair
+Gef_Pac_cls = []
+
+input_file = open("CLs/Gef_Pac.txt", "r")
+for row in input_file.readlines():
+	Gef_Pac_cls.append(row.strip())
+
+# Get corresponding gene names of cosmic IDs
+cell_id = {}
+
+with open("datasets/cosmic_id.csv", newline="") as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		cell_id[row['COSMIC_ID']] = row['Name']
+
+# Perform computation
+wanted = ["PDGFRA", 'PDGFRB', 'KDR', 'KIT', 'FLT3', 'MET', 'ALK', 'CSF1R', 'RET', 'FLT1', 'FLT4', 'AXL', 'CAMK1', 'EPHB4', 'DDR1', 'NTRK1', 'JAK2', 'FGFR1', 'FGFR3', 'EGFR', 'ERBB2', 'ADCK4']
+
+gene_list = []
+dataset = [] 
+
+with open('datasets/expression_input.csv', newline='') as csvfile:
+	reader = csv.DictReader(csvfile)
+	for row in reader:
+		gene_list.append(row['\ufeffGENE_SYMBOLS'])
+		del row['\ufeffGENE_SYMBOLS']
+		dataset.append(row)
+
+	gene_plot_pos_list = []
+
+	gene_plot_pos = open("plot_values/expression/gene_plot_pos.txt", "r")
+	for row in gene_plot_pos.readlines():
+		row = row.strip().split(',')
+		gene_plot_pos_list.append(int(row[0]))
+	
+	to_plot_Gef_Pac = np.zeros(shape=(len(dataset), len(Gef_Pac_cls)+1))
+	for index in gene_plot_pos_list:
+		to_plot_Gef_Pac[index][0] = 1.
+
+	to_plot = np.zeros(shape=(len(dataset), 1))
+	for index, row in enumerate(dataset):
+		for data in row:
+			if data[5:] in cell_id:
+				cell = cell_id[data[5:]]
+				if cell in Gef_Pac_cls:
+					to_plot_Gef_Pac[index][Gef_Pac_cls.index(cell)+1] += float(row[data])
+
+	for index, value in reversed(list(enumerate(np.count_nonzero(to_plot_Gef_Pac, axis=0)))):
+		if value == 0:
+			to_plot_Gef_Pac = np.delete(to_plot_Gef_Pac, index, 1)
+
+	to_plot_Gef_Pac = to_plot_Gef_Pac - to_plot_Gef_Pac.min(axis=0)
+	safe_max_Gef_Pac = to_plot_Gef_Pac.max(axis=0) - to_plot_Gef_Pac.min(axis=0)
+	safe_max_Gef_Pac[safe_max_Gef_Pac==0] = 1.
+	to_plot_Gef_Pac = to_plot_Gef_Pac / safe_max_Gef_Pac
+
+	write_to_plot_Gef_Pac = open("plot_values/expression/gefpac/gefpac_plot_values.csv", "w+")
+
+	for i in to_plot_Gef_Pac:
+		for j in i:
+			write_to_plot_Gef_Pac.write(str(j) + ",")
+		write_to_plot_Gef_Pac.write("\n")
+
+	plt.figure(figsize=(80, 40))
+	ax = sns.heatmap(to_plot_Gef_Pac, cmap="Blues")
+	plt.savefig("images/expression/gefpac/gefpac_image.png", dpi=300)
+	plt.close()
